@@ -7,6 +7,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.model_selection import cross_val_score, KFold
 from sklearn.ensemble import RandomForestRegressor
+import xgboost as xgb
 
 # 서울의 위도, 경도
 LAT, LON = 37.5665, 126.9780  
@@ -163,3 +164,21 @@ forecast = response.json()
 # 내일 날짜 기준 최고 기온 가져오기
 tomorrow_forecast = forecast['daily']['temperature_2m_max'][1]
 print(f"🌤️ Open-Meteo 실측 내일 최고 기온 (예보): {tomorrow_forecast}°C")
+
+
+# XGBoost 모델 생성
+xgb_model = xgb.XGBRegressor(n_estimators=200, max_depth = 6, learning_rate = 0.1, random_state=42)
+
+# 교차 검증으로 평가
+kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+xgb_scores = cross_val_score(xgb_model, features, temps.ravel(), cv=kfold, scoring='r2')
+
+print(f"🌟 XGBoost 각 Fold 별 R² 점수: {xgb_scores}")
+print(f"✅ XGBoost 평균 R²: {np.mean(xgb_scores):.2f}")
+
+xgb_model.fit(features, temps.ravel())
+xgb_features_importance = xgb_model.feature_importances_
+
+print("🌟 XGB Feature Importance (중요도):")
+for name, importance in zip(features_names, xgb_features_importance):
+    print(f"{name}: {importance:.4f}")
