@@ -21,85 +21,84 @@ params = {
     "longitude": LON,
     "start_date": start_date.strftime("%Y-%m-%d"),
     "end_date": end_date.strftime("%Y-%m-%d"),
-    "daily": ["temperature_2m_max"],
+    "daily": "temperature_2m_max,relative_humidity_2m_max,wind_speed_10m_max,surface_pressure_max,precipitation_sum,cloud_cover_mean",
     "timezone": "Asia/Seoul"
 }
 
 response = requests.get(BASE_URL, params=params)
 data = response.json()
 
-# 데이터 추출 및 출력
-if "daily" in data:
-    past_temps = data["daily"]["temperature_2m_max"]
-    days = np.array(range(1, len(past_temps) + 1)).reshape(-1, 1) # 날짜 1, 2, 3, ...
-    temps = np.array(past_temps).reshape(-1, 1) # 기온 데이터
-
-    print("\n📊 최근 30일간의 데이터 (X: 날짜, Y: 기온)")
-    for i in range(len(past_temps)):
-        print(f"Day {i+1}: {past_temps[i]}C")
-
-    # 선형 회귀 모델 생성
-    model_linear = LinearRegression()
-    model_linear.fit(days, temps)  # 선형 회귀 모델 학습
-
-    # 다항 회귀 모델 (차수 2)
-    poly = PolynomialFeatures(degree=2)
-    days_poly = poly.fit_transform(days)  # 다항식으로 변환
-    model_poly = LinearRegression()
-    model_poly.fit(days_poly, temps)  # 다항 회귀 모델 학습
-
-    # 내일 예측 (tomorrow)
-    tomorrow_day = len(past_temps) + 1
-    tomorrow = np.array([[tomorrow_day]])
-
-    predicted_temp_linear = model_linear.predict(tomorrow)[0][0]  # 선형 회귀 예측
-    predicted_temp_poly = model_poly.predict(poly.transform(tomorrow))[0][0]  # 다항 회귀 예측
-
-    print(f"\n🌡️ 예측된 내일 최고 기온 (선형 회귀): {predicted_temp_linear:.2f}°C")
-    print(f"🌡️ 예측된 내일 최고 기온 (다항 회귀): {predicted_temp_poly:.2f}°C")
-
-else:
+# 데이터 검증
+if "daily" not in data:
     print("데이터를 가져오는 데 실패했습니다.")
+    exit()
 
-# 예측값 (predicted_temp_linear)과 실제값 (temps) 비교
-predicted_temps_linear = model_linear.predict(days)
-predicted_temps_poly = model_poly.predict(days_poly)
+# 데이터 추출
+past_temps = data["daily"]["temperature_2m_max"]
+humidity = data["daily"]["relative_humidity_2m_max"]
+wind_speed = data["daily"]["wind_speed_10m_max"]
+pressure = data["daily"]["surface_pressure_max"]
+precipitation = data["daily"]["precipitation_sum"]
+cloud_cover = data["daily"]["cloud_cover_mean"]
 
-# MSE (Mean Squared Error) 계산
-mse_linear = mean_squared_error(temps, predicted_temps_linear)
-mse_poly = mean_squared_error(temps, predicted_temps_poly)
+days = np.array(range(1, len(past_temps) + 1)).reshape(-1, 1)
+temps = np.array(past_temps).reshape(-1, 1)
+features = np.hstack((
+    np.array(humidity).reshape(-1, 1),
+    np.array(wind_speed).reshape(-1, 1),
+    np.array(pressure).reshape(-1, 1),
+    np.array(precipitation).reshape(-1, 1),
+    np.array(cloud_cover).reshape(-1, 1)
+))
 
-# R^2 (결정계수) 계산
-r2_linear = r2_score(temps, predicted_temps_linear)
-r2_poly = r2_score(temps, predicted_temps_poly)
+# 선형 회귀 모델 학습
+linear_model = LinearRegression()
+linear_model.fit(days, temps)
+
+multi_feature_model = LinearRegression()
+multi_feature_model.fit(features, temps)
+
+# 다항 회귀 모델 학습 (2차)
+poly = PolynomialFeatures(degree=2)
+days_poly = poly.fit_transform(days)
+poly_model = LinearRegression()
+poly_model.fit(days_poly, temps)
+
+# 내일 예측
+tomorrow_day = np.array([[len(past_temps) + 1]])
+predicted_temp_linear = linear_model.predict(tomorrow_day)[0][0]
+predicted_temp_poly = poly_model.predict(poly.transform(tomorrow_day))[0][0]
+predicted_temp_multi = multi_feature_model.predict(features[-1].reshape(1, -1))[0][0]
+
+print(f"\n🌡️ 선형 회귀 예측: {predicted_temp_linear:.2f}°C")
+print(f"🌡️ 다항 회귀 예측: {predicted_temp_poly:.2f}°C")
+print(f"🌡️ 다중 특성 회귀 예측: {predicted_temp_multi:.2f}°C")
+
+# 모델 평가
+mse_linear = mean_squared_error(temps, linear_model.predict(days))
+r2_linear = r2_score(temps, linear_model.predict(days))
+
+mse_poly = mean_squared_error(temps, poly_model.predict(days_poly))
+r2_poly = r2_score(temps, poly_model.predict(days_poly))
+
+mse_multi = mean_squared_error(temps, multi_feature_model.predict(features))
+r2_multi = r2_score(temps, multi_feature_model.predict(features))
 
 print(f"\nLinear Regression MSE: {mse_linear:.2f}, R²: {r2_linear:.2f}")
 print(f"Polynomial Regression MSE: {mse_poly:.2f}, R²: {r2_poly:.2f}")
+print(f"Multiple Feature Regression MSE: {mse_multi:.2f}, R²: {r2_multi:.2f}")
 
-# 과거 데이터 시각화
-plt.scatter(days, temps, color='blue', label='Actual Temperature')  # 실제 기온 (scatter로 표시)
+# 그래프 시각화
+plt.scatter(days, temps, color='blue', label='Actual Temperature')
+plt.plot(days, linear_model.predict(days), color='red', label='Linear Regression')
+plt.plot(days, poly_model.predict(days_poly), color='purple', label='Polynomial Regression')
+plt.scatter(tomorrow_day, predicted_temp_linear, color='green', label=f'Tomorrow (Linear): {predicted_temp_linear:.2f}°C')
+plt.scatter(tomorrow_day, predicted_temp_poly, color='yellow', label=f'Tomorrow (Poly): {predicted_temp_poly:.2f}°C')
+plt.scatter(tomorrow_day, predicted_temp_multi, color='black', label=f'Tomorrow (Multi): {predicted_temp_multi:.2f}°C')
 
-# 예측된 값 시각화 (선형 회귀 결과)
-plt.plot(days, predicted_temps_linear, color='red', label='Linear Regression Model')  # 선형 회귀 예측
-
-# 다항 회귀 모델 값 시각화
-plt.plot(days, predicted_temps_poly, color='purple', label='Poly Regression Model')  # 다항 회귀 예측
-
-# 내일 예측된 기온 표시 (선형 회귀)
-plt.scatter(tomorrow_day, predicted_temp_linear, color='green', zorder=5, label=f'Predicted Tomorrow Temp (linear): {predicted_temp_linear:.2f}°C')
-
-# 내일 예측된 기온 표시 (다항 회귀)
-plt.scatter(tomorrow_day, predicted_temp_poly, color='yellow', zorder=5, label=f'Predicted Tomorrow Temp (poly): {predicted_temp_poly:.2f}°C')
-
-# 그래프 제목 및 레이블
-plt.title('Predicted Maximum Temperatures for One Month')
+plt.title('Temperature Prediction')
 plt.xlabel('Day')
 plt.ylabel('Temperature (°C)')
-plt.legend()
-
-# 범례를 그래프 밖으로 배치
-plt.legend(loc='upper left', bbox_to_anchor=(1, 1))  # 범례를 그래프의 오른쪽 상단으로 이동
-
-# 그래프를 파일로 저장
-plt.savefig('temperature_prediction.png', bbox_inches='tight')  # bbox_inches='tight'로 여백 조정
-plt.show()  # 그래프 표시
+plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+plt.savefig('temperature_prediction.png', bbox_inches='tight', dpi=300)
+plt.show()
