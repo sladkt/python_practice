@@ -5,14 +5,16 @@ from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import PolynomialFeatures
+from sklearn.model_selection import cross_val_score, KFold
+from sklearn.ensemble import RandomForestRegressor
 
 # 서울의 위도, 경도
 LAT, LON = 37.5665, 126.9780  
 BASE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
-# 날짜 계산 (최근 30일)
+# 날짜 계산 (최근 365일)
 today = datetime.date.today()
-start_date = today - datetime.timedelta(days=30)
+start_date = today - datetime.timedelta(days=1095)
 end_date = today - datetime.timedelta(days=2)
 
 # API 요청
@@ -96,9 +98,68 @@ plt.scatter(tomorrow_day, predicted_temp_linear, color='green', label=f'Tomorrow
 plt.scatter(tomorrow_day, predicted_temp_poly, color='yellow', label=f'Tomorrow (Poly): {predicted_temp_poly:.2f}°C')
 plt.scatter(tomorrow_day, predicted_temp_multi, color='black', label=f'Tomorrow (Multi): {predicted_temp_multi:.2f}°C')
 
+for degree in [2, 3, 4, 5]:
+    polys = PolynomialFeatures(degree=degree)
+    days_polys = polys.fit_transform(days)
+
+    model_polys = LinearRegression()
+    model_polys.fit(days_polys, temps)
+
+    predicted_polys = model_polys.predict(days_polys)
+
+    predicted_temp_polys = model_polys.predict(polys.transform(tomorrow_day))[0][0]
+
+    mse_polys = mean_squared_error(temps, predicted_polys)
+
+    r2_polys = r2_score(temps, predicted_polys)
+
+    print(f"Degree {degree} → MSE: {mse_polys:.2f}, R²: {r2_polys:.2f}, predict: {predicted_temp_polys:.2f}")
+
+    plt.plot(days, model_polys.predict(days_polys), color='navy', label='Polynomial Regression {degree}')
+    plt.scatter(tomorrow_day, predicted_temp_polys, color='orange', label=f'Tomorrow ({degree}): {predicted_temp_polys:.2f}°C')
+
+
 plt.title('Temperature Prediction')
 plt.xlabel('Day')
 plt.ylabel('Temperature (°C)')
 plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
 plt.savefig('temperature_prediction.png', bbox_inches='tight', dpi=300)
 plt.show()
+
+# 랜덤 포레스트 모델 학습 (200)
+rf_model = RandomForestRegressor(n_estimators=200, random_state=42)
+rf_model.fit(features, temps.ravel())
+predicted_temp_rf = rf_model.predict(features[-1].reshape(1, -1))[0]
+
+kfold = KFold(n_splits=5, shuffle=True, random_state=42)
+scores = cross_val_score(rf_model, days, temps.ravel(), cv=kfold, scoring='r2')
+print(f"🌲 랜덤 포레스트 각 Fold 별 R² 점수: {scores}")
+print(f"평균 R²: {np.mean(scores):.2f}")
+print(f"🌡️ 랜덤 포레스트 예측: {predicted_temp_rf:.2f}°C")
+
+
+# 특성 중요도 추출
+features_importance = rf_model.feature_importances_
+
+# 특성 이름 정리
+features_names = ["Humidity", "Wind Speed", "Pressure", "Precipitation", "Cloud Cover"]
+
+# 출력
+print("🌟 Feature Importance (중요도):")
+for name, importance in zip(features_names, features_importance):
+    print(f"{name}: {importance:.4f}")
+
+future_api = "https://api.open-meteo.com/v1/forecast"
+params = {
+    "latitude": LAT,
+    "longitude": LON,
+    "daily": "temperature_2m_max",
+    "timezone": "Asia/Seoul"
+}
+
+response = requests.get(future_api, params=params)
+forecast = response.json()
+
+# 내일 날짜 기준 최고 기온 가져오기
+tomorrow_forecast = forecast['daily']['temperature_2m_max'][1]
+print(f"🌤️ Open-Meteo 실측 내일 최고 기온 (예보): {tomorrow_forecast}°C")
