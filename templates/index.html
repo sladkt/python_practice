@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Prediction</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f0f0f0; }
+        .container { width: 80%; margin: 0 auto; padding: 20px; text-align: center; }
+        .card { background-color: white; border-radius: 8px; padding: 20px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); margin-bottom: 20px; }
+        h1 { color: #333; }
+        .result { font-size: 20px; color: #555; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Weather Prediction and Real Forecast</h1>
+        <div class="card">
+            <h3>Model Prediction:</h3>
+            <p class="result">{{ model_prediction }}°C</p>
+        </div>
+        <div class="card">
+            <h3>Real Forecast:</h3>
+            <p class="result">{{ real_forecast }}°C</p>
+        </div>
+    </div>
+</body>
+</html>

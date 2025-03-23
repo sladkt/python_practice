@@ -99,7 +99,7 @@ plt.scatter(tomorrow_day, predicted_temp_linear, color='green', label=f'Tomorrow
 plt.scatter(tomorrow_day, predicted_temp_poly, color='yellow', label=f'Tomorrow (Poly): {predicted_temp_poly:.2f}°C')
 plt.scatter(tomorrow_day, predicted_temp_multi, color='black', label=f'Tomorrow (Multi): {predicted_temp_multi:.2f}°C')
 
-for degree in [2, 3, 4, 5]:
+for degree in [2, 3, 4, 5]:   # 다항식 차수 올려가며 예측
     polys = PolynomialFeatures(degree=degree)
     days_polys = polys.fit_transform(days)
 
@@ -127,6 +127,14 @@ plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
 plt.savefig('temperature_prediction.png', bbox_inches='tight', dpi=300)
 plt.show()
 
+# 랜덤 포레스트 모델 학습 함수 
+def predicted_rf():
+    rf_model = RandomForestRegressor(n_estimators=200, random_state=42)
+    rf_model.fit(features, temps.ravel())
+    predicted_temp_rf = rf_model.predict(features[-1].reshape(1, -1))[0]
+
+    return round(predicted_temp_rf, 2)
+
 # 랜덤 포레스트 모델 학습 (200)
 rf_model = RandomForestRegressor(n_estimators=200, random_state=42)
 rf_model.fit(features, temps.ravel())
@@ -136,7 +144,7 @@ kfold = KFold(n_splits=5, shuffle=True, random_state=42)
 scores = cross_val_score(rf_model, days, temps.ravel(), cv=kfold, scoring='r2')
 print(f"🌲 랜덤 포레스트 각 Fold 별 R² 점수: {scores}")
 print(f"평균 R²: {np.mean(scores):.2f}")
-print(f"🌡️ 랜덤 포레스트 예측: {predicted_temp_rf:.2f}°C")
+print(f"🌡️ 랜덤 포레스트 예측: {predicted_rf():.2f}°C")
 
 
 # 특성 중요도 추출
@@ -165,6 +173,22 @@ forecast = response.json()
 tomorrow_forecast = forecast['daily']['temperature_2m_max'][1]
 print(f"🌤️ Open-Meteo 실측 내일 최고 기온 (예보): {tomorrow_forecast}°C")
 
+
+def get_real_temp():   # 실제 예보 날씨 getter
+    future_api = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": LAT,
+        "longitude": LON,
+        "daily": "temperature_2m_max",
+        "timezone": "Asia/Seoul"
+    }
+
+    response = requests.get(future_api, params=params)
+    forecast = response.json()
+
+    # 내일 날짜 기준 최고 기온 가져오기
+    tomorrow_forecast = forecast['daily']['temperature_2m_max'][1]
+    return tomorrow_forecast
 
 # XGBoost 모델 생성
 xgb_model = xgb.XGBRegressor(n_estimators=200, max_depth = 6, learning_rate = 0.1, random_state=42)
